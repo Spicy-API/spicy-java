@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>ai.spicyapi</groupId>
+  <artifactId>spicyapi-java</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>SpicyAPI Java client</name>
+  <description>Official Java client for SpicyAPI — image, video and text generation behind one API.</description>
+  <url>https://spicyapi.ai</url>
+  <inceptionYear>2026</inceptionYear>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <name>SpicyAPI</name>
+      <organization>SpicyAPI</organization>
+      <organizationUrl>https://spicyapi.ai</organizationUrl>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/Spicy-API/spicy-java.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/Spicy-API/spicy-java.git</developerConnection>
+    <url>https://github.com/Spicy-API/spicy-java</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <issueManagement>
+    <system>SpicyAPI support</system>
+    <url>https://spicyapi.ai/contact</url>
+  </issueManagement>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+
+    <!--
+      This declares the MINIMUM usable version, not a recommended one. Maven's nearest-wins
+      resolution lets the consumer's own Jackson take precedence, so this number only applies when
+      they have no Jackson at all. 2.12 is the release where record support landed; below it a
+      record is treated as an ordinary POJO with no usable constructor and deserialisation simply
+      fails. CI runs an extra pass against a recent version to confirm both ends of the range hold.
+    -->
+    <jackson.version>2.12.0</jackson.version>
+    <junit.version>5.11.4</junit.version>
+  </properties>
+
+  <dependencies>
+    <!--
+      Jackson is a compile-scope dependency and deliberately NOT optional. Marking it optional
+      would deny consumers the transitive dependency, and the first call would blow up at runtime
+      with NoClassDefFoundError - which, from where they sit, looks like our bug. It is not shaded
+      either: jacksonModule() returns com.fasterxml.jackson.databind.Module, and shading would turn
+      that into an internal type that consumers cannot register with their own ObjectMapper, which
+      also takes the objectMapper(...) builder method down with it.
+    -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <!-- Same stance as the javac -Xlint:all -Werror used before this was split out:
+               a warning is a failure. -->
+          <compilerArgs>
+            <arg>-Xlint:all</arg>
+          </compilerArgs>
+          <failOnWarning>true</failOnWarning>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.2</version>
+        <configuration>
+          <archive>
+            <manifest>
+              <!--
+                This is what puts Implementation-Title and Implementation-Version into the
+                manifest, and SpicyClient.version() reads Implementation-Version. Without it
+                version() always returns dev, and the User-Agent can never tell us which release
+                a caller is running.
+              -->
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+            </manifest>
+            <manifestEntries>
+              <!--
+                Without this line, consumers on the module path get a module name derived from the
+                JAR file name, which makes renaming the file a breaking change. Pinning it here
+                decouples the two.
+              -->
+              <Automatic-Module-Name>ai.spicyapi</Automatic-Module-Name>
+            </manifestEntries>
+          </archive>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals><goal>jar-no-fork</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.11.2</version>
+        <configuration>
+          <doclint>all</doclint>
+          <quiet>true</quiet>
+          <notimestamp>true</notimestamp>
+        </configuration>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals><goal>jar</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!--
+      Release profile: configured but not activated by default. Signing happens in CI, where the
+      key lives; run mvn -Prelease deploy there and the central-publishing plugin picks up the
+      credentials under server id "central" in settings.xml.
+    -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.7</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals><goal>sign</goal></goals>
+                <configuration>
+                  <!-- Never prompt for the passphrase: nobody is there to answer in CI, so it
+                       would simply hang until the job times out. -->
+                  <gpgArguments>
+                    <arg>--pinentry-mode</arg>
+                    <arg>loopback</arg>
+                  </gpgArguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <!--
+              0.7.0 is unusable: the Sonatype API later added a "warnings" field to the validation
+              response, and the old plugin's Jackson is not configured to ignore unknown fields, so
+              it fails while polling - AFTER the bundle has already been uploaded. The symptom is
+              badly misleading: the log says the upload succeeded and then reports BUILD FAILURE,
+              which reads as a failed release when the bundle is in fact sitting in the portal.
+            -->
+            <version>0.11.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <!-- No auto-publish: confirm in the Central portal by hand after upload. A version,
+                   once released, can never be withdrawn. -->
+              <autoPublish>false</autoPublish>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>
